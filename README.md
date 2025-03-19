@@ -7,6 +7,8 @@ A Telegram bot that helps you track and categorize your expenses by processing r
 - Cleaning the database of outstanding receipts
 - Deletion of photo files
 - Saving “important” receipts in google drive (for example, for warranty purposes)
+- Monthly message with a summary of costs
+- Excell for the second person, so budget for couples
 - ...
 
 ## Features
