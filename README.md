@@ -13,7 +13,7 @@ A Telegram bot that helps you track and categorize your expenses by processing r
 - 📈 Automatic export to Google Sheets
 - 📝 Monthly organization of expenses
 - 🔍 Manual entry option for receipts
-- 🌐 Multi-language support (Polish and English)
+- 🌐 Multi-language support (Polish and English today, feel free to commit your proposition of translation)
 
 ## Expense Categories
 
