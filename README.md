@@ -99,6 +99,7 @@ These categories can be customized by modifying the `categories` array in `confi
    GOOGLE_SHEETS_SPREADSHEET_ID=your_spreadsheet_id
    ```
 4. Make your own configuration
+5. Run it with `npm run dev` or build and run with `npm run build  && npm run start`
 
 ### Configuration
 
