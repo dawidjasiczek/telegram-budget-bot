@@ -1,0 +1,6 @@
+.env
+google-credentials.json
+/node_modules
+/src/downloads
+data.db
+/dist
