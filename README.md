@@ -2,6 +2,13 @@
 
 A Telegram bot that helps you track and categorize your expenses by processing receipt photos. The bot can handle both private and shared expenses, automatically calculating your portion of shared costs.
 
+## Roadmap
+- Each item in the receipt should be possible to do as a shared or private expense
+- Cleaning the database of outstanding receipts
+- Deletion of photo files
+- Saving “important” receipts in google drive (for example, for warranty purposes)
+- ...
+
 ## Features
 
 - 📸 Process receipt photos through Telegram
