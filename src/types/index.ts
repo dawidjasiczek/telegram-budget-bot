@@ -1,9 +1,8 @@
-import { Message } from 'node-telegram-bot-api';
-
 export interface ReceiptProduct {
   name: string;
   price: number;
   category: string;
+  isShared: boolean;
 }
 
 export interface ReceiptAnalysis {
@@ -30,7 +29,6 @@ export enum ReceiptStatus {
 
 export interface ReceiptRecord {
   filePath: string;
-  purchaseType: 'solo' | 'shared';
   comments: string;
   timestamp: string;
   storeName: string | null;

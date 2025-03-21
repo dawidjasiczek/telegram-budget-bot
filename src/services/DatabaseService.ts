@@ -35,7 +35,6 @@ export class DatabaseService {
       CREATE TABLE IF NOT EXISTS receipts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         file_path TEXT NOT NULL,
-        purchase_type TEXT NOT NULL,
         comments TEXT,
         timestamp TEXT NOT NULL,
         store_name TEXT,
@@ -53,6 +52,7 @@ export class DatabaseService {
         name TEXT NOT NULL,
         price REAL NOT NULL,
         category TEXT NOT NULL,
+        isShared BOOLEAN DEFAULT FALSE,
         FOREIGN KEY (receipt_id) REFERENCES receipts(id)
       );
     `);
@@ -85,13 +85,12 @@ export class DatabaseService {
 
     const result = await this.db.run(
       `INSERT INTO receipts (
-        file_path, purchase_type, comments, timestamp, store_name,
+        file_path, comments, timestamp, store_name,
         total_amount, input_tokens, output_tokens, total_tokens,
         status, status_history
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         record.filePath,
-        record.purchaseType,
         record.comments,
         record.timestamp,
         record.storeName,
@@ -142,9 +141,9 @@ export class DatabaseService {
     // Insert new products
     for (const product of record.products) {
       await this.db.run(
-        `INSERT INTO products (receipt_id, name, price, category)
-         VALUES (?, ?, ?, ?)`,
-        [receiptId, product.name, product.price, product.category]
+        `INSERT INTO products (receipt_id, name, price, category, isShared)
+         VALUES (?, ?, ?, ?, ?)`,
+        [receiptId, product.name, product.price, product.category, product.isShared]
       );
     }
   }
@@ -163,7 +162,6 @@ export class DatabaseService {
 
       records.push({
         filePath: receipt.file_path,
-        purchaseType: receipt.purchase_type,
         comments: receipt.comments,
         timestamp: receipt.timestamp,
         storeName: receipt.store_name,
@@ -171,7 +169,8 @@ export class DatabaseService {
         products: products.map(p => ({
           name: p.name,
           price: p.price,
-          category: p.category
+          category: p.category,
+          isShared: p.isShared
         })),
         gptTokens: {
           input_tokens: receipt.input_tokens,
@@ -225,7 +224,6 @@ export class DatabaseService {
 
     return {
       filePath: receipt.file_path,
-      purchaseType: receipt.purchase_type,
       comments: receipt.comments,
       timestamp: receipt.timestamp,
       storeName: receipt.store_name,
@@ -233,7 +231,8 @@ export class DatabaseService {
       products: products.map(p => ({
         name: p.name,
         price: p.price,
-        category: p.category
+        category: p.category,
+        isShared: p.isShared
       })),
       gptTokens: {
         input_tokens: receipt.input_tokens,

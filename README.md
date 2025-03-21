@@ -1,24 +1,44 @@
 # Receipt Tracker Bot
 
-A Telegram bot that helps you track and categorize your expenses by processing receipt photos. The bot can handle both private and shared expenses, automatically calculating your portion of shared costs.
+A Telegram bot that helps you track and categorize your expenses by processing receipt photos. The bot can handle both private and shared expenses at a product level, allowing you to specify which items are shared and which are private.
 
 ## Roadmap
-- Each item in the receipt should be possible to do as a shared or private expense
 - Cleaning the database of outstanding receipts
 - Deletion of photo files
-- Saving “important” receipts in google drive (for example, for warranty purposes)
+- Saving "important" receipts in google drive (for example, for warranty purposes)
 - Monthly message with a summary of costs
 - Excell for the second person, so budget for couples
 - ...
+
+## Changelog
+
+### Version 1.1.0 (21.03.2024)
+- ✨ Added product-level sharing control for both AI and manual entry
+- 🖼️ Improved image preprocessing for better AI receipt analysis
+- 🔄 Added ability to modify sharing status after initial processing
+- 📝 Updated manual entry to support per-product sharing settings
+
+### Version 1.0.0 (Initial Release)
+- 📸 Basic receipt photo processing
+- 🤖 AI-powered receipt analysis
+- 📊 Automatic categorization
+- 💰 Basic shared/private expense tracking
+- 📈 Google Sheets integration
+- 🌐 Multi-language support (PL/EN)
 
 ## Features
 
 - 📸 Process receipt photos through Telegram
 - 🤖 AI-powered receipt analysis using OpenAI
+  - Smart image preprocessing for better recognition
+  - Automatic text extraction and parsing
+  - Intelligent categorization of items
 - 📊 Automatic categorization of expenses
-- 💰 Support for both private and shared expenses
-  - Private expenses: 100% of the cost is tracked
-  - Shared expenses: Configurable percentage of the cost is tracked (default: 50%)
+- 💰 Flexible expense sharing at product level:
+  - Set entire receipt as private or shared
+  - Choose products individually for sharing
+  - Modify sharing status after AI analysis
+  - Control sharing in manual entry mode
 - 📈 Automatic export to Google Sheets
 - 📝 Monthly organization of expenses
 - 🔍 Manual entry option for receipts
@@ -161,17 +181,24 @@ categories: Array<{
 2. In Telegram:
    - Send `/start` to begin
    - Send a photo of your receipt
-   - Answer questions about the purchase type:
-     - For private expenses: use keywords like "solo", "private", "personal"
-     - For shared expenses: use keywords like "shared", "together", "common"
-     - For manual entry: use keywords like "manual", "manually"
+   - Choose processing method:
+     - AI analysis
+     - Manual entry
    - Add any additional comments if needed
-   - Wait for the bot to process and categorize your receipt (or do it manually adding products one by one)
+   - For AI-processed receipts:
+     - Review the analyzed items
+     - Choose sharing mode:
+       - All items shared
+       - All items private
+       - Individual selection (select specific items to be shared/private)
+   - For manual entry:
+     - Enter store name
+     - Add products one by one with sharing status
+     - Or set default sharing status and modify individual items
 
 3. The bot will:
-   - Analyze the receipt using AI
-   - Categorize each item
-   - Calculate your portion of shared expenses
+   - Process the receipt (AI or manual)
+   - Allow you to set sharing preferences for each item
    - Save the data to your Google Sheets spreadsheet
    - Organize entries by month
 
@@ -183,7 +210,7 @@ The bot creates monthly sheets with the following columns:
 - Name (Product)
 - Price (Adjusted for shared expenses)
 - Category
-- Purchase Type
+- Is Shared (indicates if the product is shared with others)
 
 ## Development
 

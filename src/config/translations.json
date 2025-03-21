@@ -1,50 +1,15 @@
 {
-  "en": {
-    "months": "January, February, March, April, May, June, July, August, September, October, November, December",
-    "bot": {
-      "start": "Hello! Send me a photo of your receipt, and then we'll answer a few questions.",
-      "photoSaved": "Photo (receipt) has been saved and processed on the server!",
-      "photoError": "An error occurred while saving the photo.",
-      "photoDownloadError": "Failed to download the photo.",
-      "purchaseTypeQuestion": "Did you make purchases from your personal account or shared account? Answers: \n Personal: {commonWords} or {soloWords} \n Shared: {commonWords} \n You can also choose manual entry by typing {manualCommands}",
-      "purchaseTypeSelected": "You selected: {type}.",
-      "commentsQuestion": "Do you have any additional comments about the purchases?",
-      "commentsAdded": "Comments: {comments}",
-      "noComments": "none",
-      "recordError": "Failed to retrieve record from database.",
-      "analysisComplete": "Receipt analysis has been completed!",
-      "analysisError": "An error occurred while analyzing the receipt.",
-      "receiptSummary": "Receipt has been saved and processed!\n\n🏪 Store: {store}\n💰 Total: {total} PLN\n\n📝 Products:\n{products}\n\n📊 Tokens used:\n- Input: {inputTokens} ({inputCost} PLN)\n- Output: {outputTokens} ({outputCost} PLN)\n- Total: {totalTokens} ({totalCost} PLN)",
-      "sheetsSuccess": "Data has been saved to Google Sheets!",
-      "sheetsError": "An error occurred while saving data to the sheet.",
-      "handleManualRecipe": {
-        "info": "You have selected the option to manually enter a receipt.",
-        "invalidFormat": "Invalid format. Please use: store, item name, category, price, type (shared/solo)",
-        "invalidPrice": "Invalid price format. Please use numbers with decimal point (e.g., 4.99)",
-        "invalidType": "Invalid type. Please use 'shared' or 'solo'",
-        "invalidCategory": "Invalid category. Available categories:\n{categories}",
-        "success": "Successfully processed {count} items",
-        "askStore": "Please enter the store name:",
-        "askItems": "Please enter the items in the format: item name, category, price, type (shared/solo)\n\nThe word 'stop' ends the entry.",
-        "askTotal": "Please enter the total amount:",
-        "askDate": "Please enter the date (YYYY-MM-DD):",
-        "invalidDate": "Invalid date format. Please use YYYY-MM-DD",
-        "invalidTotal": "Invalid total amount format. Please use numbers with decimal point (e.g., 99.99)",
-        "storeRequired": "Store name is required",
-        "itemsRequired": "At least one item is required",
-        "totalRequired": "Total amount is required",
-        "dateRequired": "Date is required"
-      }
-    }
-  },
+  "en": {},
   "pl": {
     "months": "Styczeń, Luty, Marzec, Kwiecień, Maj, Czerwiec, Lipiec, Sierpień, Wrzesień, Październik, Listopad, Grudzień",
+    "sharedWords": "wspólne",
+    "soloWords": "prywatne",
     "bot": {
       "start": "Witaj! Wyślij mi zdjęcie paragonu, a następnie odpowiemy na kilka pytań.",
       "photoSaved": "Zdjęcie (paragon) zostało zapisane i przetworzone na serwerze!",
       "photoError": "Wystąpił błąd podczas zapisywania zdjęcia.",
       "photoDownloadError": "Nie udało się pobrać zdjęcia.",
-      "purchaseTypeQuestion": "Czy zakupy zrobiłeś ze swojego konta czy wspólnego konta? Odpowiedzi: \n Swoje: {commonWords} lub {soloWords} \n Wspólne: {commonWords} \n Możesz też wybrać wprowadzanie manualne wpisujac {manualCommands}",
+      "aiProcessingQuestion": "Czy chciałbyś by odpowiedzi były przetwarzane przez AI? ({YES}) lub ({NO}) jeżeli chcesz wprowadzić paragon ręcznie",
       "purchaseTypeSelected": "Wybrałeś: {type}.",
       "commentsQuestion": "Czy masz dodatkowe komentarze do zakupów?",
       "commentsAdded": "Komentarze: {comments}",
@@ -55,6 +20,7 @@
       "receiptSummary": "Paragon został zapisany i przetworzony!\n\n🏪 Sklep: {store}\n💰 Suma: {total} PLN\n\n📝 Produkty:\n{products}\n\n📊 Wykorzystane tokeny:\n- Wejściowe: {inputTokens} ({inputCost} PLN)\n- Wyjściowe: {outputTokens} ({outputCost} PLN)\n- Suma: {totalTokens} ({totalCost} PLN)",
       "sheetsSuccess": "Dane zostały zapisane w arkuszu Google Sheets!",
       "sheetsError": "Wystąpił błąd podczas zapisywania danych do arkusza.",
+      "showProducts": "Lista produktów:\n{products}",
       "handleManualRecipe": {
         "info": "Wybrałeś opcję ręcznego wprowadzania paragonu.",
         "invalidFormat": "Nieprawidłowy format. Użyj: sklep, nazwa produktu, kategoria, cena, typ (wspólne/solo)",
@@ -63,8 +29,8 @@
         "invalidCategory": "Nieprawidłowa kategoria. Dostępne kategorie:\n{categories}",
         "success": "Pomyślnie przetworzono {count} pozycji",
         "askStore": "Proszę podać nazwę sklepu:",
-        "askType": "Proszę wybrać typ zakupu: {commonWords} lub {soloWords}",
-        "askItems": "Proszę podać produkty w formacie: nazwa produktu, kategoria, cena. Dostępne kategorie:\n{categories}\n\nSłowo 'stop' kończy wprowadzanie produktów.",
+        "askType": "Proszę wybrać domyślny typ zakupu: {commonWords} lub {soloWords}. \nJeśli nie zostanie określone inaczej, tak ustawione zostaną wszystkie produkty wpisane ręcznie.",
+        "askItems": "Proszę podać produkty w formacie: nazwa produktu, kategoria, cena, ({commonWords} / {soloWords}). Dostępne kategorie:\n{categories}\n\nSłowo 'stop' kończy wprowadzanie produktów.",
         "askTotal": "Proszę podać sumę:",
         "askDate": "Proszę podać datę (YYYY-MM-DD):",
         "invalidDate": "Nieprawidłowy format daty. Użyj YYYY-MM-DD",
@@ -73,6 +39,13 @@
         "itemsRequired": "Wymagany jest przynajmniej jeden produkt",
         "totalRequired": "Suma jest wymagana",
         "dateRequired": "Data jest wymagana"
+      },
+      "preciseAiResponse": {
+        "askType": "Jak chcesz ustawić produkty z paragonu?\n- '{commonWords}' - wszystkie produkty będą wspólne\n- '{soloWords}' - wszystkie produkty będą prywatne\n- '{multiWords}' - wybierzesz dla każdego produktu osobno",
+        "askDefaultType": "Większość produktów będzie wspólna ({commonWords}) czy prywatna ({soloWords})?",
+        "selectProducts": "Wpisz numery produktów które chcesz zmienić (np. 1,3,5) lub:\n- 'SHOW' aby zobaczyć listę produktów\n- 'STOP' aby zakończyć",
+        "invalidNumbers": "Nieprawidłowe numery produktów. Spróbuj ponownie.",
+        "completed": "Zaktualizowano status produktów!"
       }
     }
   }

@@ -5,17 +5,18 @@ import path from 'path';
 import { waitForAnswer } from './utils/waitForAnswer';
 import { createRecord, updateRecord, cleanupOldRecords, getRecordById, updateReceiptStatus } from './utils/records';
 import { OpenAIClient } from './services/OpenAIClient';
-import { processAndRenameImage } from './utils/imageUtils';
 import { config, findCategory, getHumanReadableCategoryList } from './config/config';
-import { AiProcessReceiptResponse, GPTTokens, ReceiptProduct, ReceiptRecord, ReceiptStatus } from './types';
+import { AiProcessReceiptResponse, ReceiptRecord, ReceiptStatus } from './types';
 import { GoogleSheetsClient } from './services/GoogleService';
 import { TranslationService, Language } from './services/TranslationService';
+import { ImageProcessor } from './services/ImageService';
 
 dotenvConfig();
 
+let isProcessing = false;
+
 // Initialize translation service
 const translationService = TranslationService.getInstance();
-
 translationService.setLanguage(config.language as Language);
 
 // Initialize Google Sheets client
@@ -39,7 +40,31 @@ setInterval(() => {
   cleanupOldRecords().catch(err => console.error('Error cleaning up old records:', err));
 }, 60 * 60 * 1000);
 
+// Add handler for commands from config
+const commandPattern = new RegExp(`^(${config.manualCommands.join('|')})$`, 'i');
+bot.onText(commandPattern, async (msg) => {
+  if (isProcessing) {
+    return;
+  }
+  isProcessing = true;
+  await handleManualRecipe(bot, msg.chat.id);
+  isProcessing = false;
+});
+
+bot.onText(/\/start/, (msg) => {
+  if (isProcessing) {
+    return;
+  }
+  isProcessing = true;
+  bot.sendMessage(msg.chat.id, translationService.translate('bot.start'));
+  isProcessing = false;
+}); 
+
 bot.on('photo', async (msg) => {
+  if (isProcessing) {
+    return;
+  }
+  isProcessing = true;
   const chatId = msg.chat.id;
   const photoArray = msg.photo;
   if (!photoArray || photoArray.length === 0) {
@@ -54,7 +79,6 @@ bot.on('photo', async (msg) => {
   // Create initial record with just the file path
   const initialRecord: ReceiptRecord = {
     filePath,
-    purchaseType: 'solo', // Default value, will be updated
     comments: '',
     timestamp: new Date().toISOString(),
     storeName: '',
@@ -77,17 +101,15 @@ bot.on('photo', async (msg) => {
   const receiptId = await createRecord(initialRecord);
 
   // Get purchase type and update record
-  const purchaseType = await handlePurchaseTypeQuestion(bot, chatId);
-  await updateReceiptStatus(receiptId, ReceiptStatus.PROCESSING, 'Processing purchase type');
+  const purchaseType = await handleAiProcessingQuestion(bot, chatId);
+  await updateReceiptStatus(receiptId, ReceiptStatus.PROCESSING, 'Selected processing way');
 
   if (purchaseType === 'manual') {
     await handleManualRecipe(bot, chatId, receiptId);
     return;
   }
 
-  initialRecord.purchaseType = purchaseType;
-  await updateRecord(receiptId, initialRecord);
-
+  // AI ANALISE
   // Get comments and update record
   const comments = await handleCommentsQuestion(bot, chatId);
   initialRecord.comments = comments;
@@ -95,16 +117,16 @@ bot.on('photo', async (msg) => {
 
   // Process with OpenAI and update final details
   await updateReceiptStatus(receiptId, ReceiptStatus.PROCESSING, 'Starting AI analysis');
-  // const aiResponse = await processReceiptWithOpenAI(bot, chatId, receiptId);
-  const aiResponse = {
-    storeName: 'CH Posnania',
-    totalAmount: 234.98,
-    products: [
-      { name: 'Kolekcja Podstawowa', price: 69.99, category: 'Clothing' },
-      { name: 'Spodnie', price: 164.99, category: 'Clothing' }
-    ],
-    gptTokens: { input_tokens: 1207, output_tokens: 59, total_tokens: 1266 }
-  }
+  const aiResponse = await processReceiptWithOpenAI(bot, chatId, receiptId);
+  // const aiResponse = {
+  //   storeName: 'CH Posnania',
+  //   totalAmount: 234.98,
+  //   products: [
+  //     { name: 'Kolekcja Podstawowa', price: 69.99, category: 'Clothing', isShared: true },
+  //     { name: 'Spodnie', price: 164.99, category: 'Clothing', isShared: true }
+  //   ],
+  //   gptTokens: { input_tokens: 1207, output_tokens: 59, total_tokens: 1266 }
+  // }
 
   initialRecord.storeName = aiResponse?.storeName || '';
   initialRecord.products = aiResponse?.products || [];
@@ -117,10 +139,15 @@ bot.on('photo', async (msg) => {
   await updateRecord(receiptId, initialRecord);
   await updateReceiptStatus(receiptId, ReceiptStatus.ANALYZED, 'AI analysis completed');
 
+  await preciseAiResponse(receiptId, bot, chatId);
+
+  await updateReceiptStatus(receiptId, ReceiptStatus.CATEGORIZED, 'Categories precised');
+
+
   // Append receipt data to Google Sheets
   try {
     await updateReceiptStatus(receiptId, ReceiptStatus.PROCESSING, 'Saving to Google Sheets');
-    await appendReceiptToGoogleSheets(initialRecord);
+    await appendReceiptToGoogleSheets(receiptId);
     await updateReceiptStatus(receiptId, ReceiptStatus.SAVED_TO_SHEETS, 'Data saved to Google Sheets');
     bot.sendMessage(chatId, translationService.translate('bot.sheetsSuccess'));
   } catch (error: any) {
@@ -133,6 +160,7 @@ bot.on('photo', async (msg) => {
   await updateReceiptStatus(receiptId, ReceiptStatus.COMPLETED, 'Receipt processing completed successfully');
   const finalRecord = await getRecordById(receiptId);
   console.log('Final record:', finalRecord);
+  isProcessing = false;
 });
 
 /**
@@ -150,7 +178,17 @@ async function handleImageProcessing(bot: TelegramBot, chatId: number, fileId: s
 
   try {
     const downloadedFilePath = await bot.downloadFile(fileId, downloadDir);
-    const filePath = await processAndRenameImage(downloadedFilePath, true);
+
+    const filePath = await new ImageProcessor(downloadedFilePath)
+      .improveContrast(1.2, -20)
+      .sharpenDefaultSettings('strong')
+      .reduceNoise(1)
+      .binarize(140)
+      .resize(config.maxDimension)
+      .renameToCurrentDate()
+      .save(true);
+
+    bot.sendMessage(chatId, "Final image saved as: " + path.basename(filePath));
     bot.sendMessage(chatId, translationService.translate('bot.photoSaved'));
     console.log('Image saved and processed:', filePath);
     return filePath;
@@ -161,33 +199,39 @@ async function handleImageProcessing(bot: TelegramBot, chatId: number, fileId: s
   }
 }
 
-/**
- * Handles the purchase type question workflow
- * @param bot - Telegram bot instance
- * @param chatId - ID of the chat where the question should be sent
- * @returns Promise resolving to the selected purchase type
- */
-async function handlePurchaseTypeQuestion(bot: TelegramBot, chatId: number): Promise<'solo' | 'shared' | 'manual'> {
-  bot.sendMessage(chatId, translationService.translate('bot.purchaseTypeQuestion'));
-  const answer = await waitForAnswer(bot, chatId, (m) => !!m.text, 120000);
 
-  if (answer && answer.text) {
-    const text = answer.text.toLowerCase();
-    if (config.manualCommands.some((keyword: string) => text.includes(keyword))) {
-      return 'manual';
-    }
-    
-    if (config.commonKeywords.some((keyword: string) => text.includes(keyword))) {
-      await bot.sendMessage(chatId, translationService.translate('bot.purchaseTypeSelected', { type: 'shared' }));
-      return 'shared';
-    } else if (config.soloKeywords.some((keyword: string) => text.includes(keyword))) {
-      await bot.sendMessage(chatId, translationService.translate('bot.purchaseTypeSelected', { type: 'solo' }));
-      return 'solo';
-    }
-  }
+async function handleAiProcessingQuestion(bot: TelegramBot, chatId: number): Promise<'ai' | 'manual'> {
+  const isValidAnswer = (text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    return config.yesKeywords.some(k => lowerText.includes(k)) || 
+           config.noKeywords.some(k => lowerText.includes(k)) ||
+           config.manualCommands.some(k => lowerText.includes(k));
+  };
+
+  const answer = await waitForValidAnswer(
+    bot,
+    chatId,
+    translationService.translate('bot.aiProcessingQuestion',
+    { 
+      YES: config.yesKeywords.join('/'),
+      NO: config.noKeywords.join('/')
+    }),
+    isValidAnswer
+  );
+
+  const text = answer.toLowerCase();
   
-  await bot.sendMessage(chatId, translationService.translate('bot.purchaseTypeSelected', { type: 'solo' }));
-  return 'solo';
+  if (config.manualCommands.some(keyword => text.includes(keyword)) ||
+      config.noKeywords.some(keyword => text.includes(keyword))) {
+    return 'manual';
+  }
+
+  if (config.yesKeywords.some(keyword => text.includes(keyword))) {
+    return 'ai';
+  }
+
+  // Should never reach here due to isValidAnswer check
+  return 'manual';
 }
 
 /**
@@ -214,41 +258,20 @@ async function handleCommentsQuestion(bot: TelegramBot, chatId: number): Promise
  * @returns Promise resolving to the AI processing response or null if processing failed
  */
 async function processReceiptWithOpenAI(bot: TelegramBot, chatId: number, receiptId: number): Promise<AiProcessReceiptResponse | null> {
-  const openaiClient = new OpenAIClient();
+
+  const isAnalyzed = await analyzeReceiptWithOpenAI(receiptId, bot, chatId);
+  if (!isAnalyzed) {
+    return null;
+  }
+  
   const record = await getRecordById(receiptId);
   if (!record) {
-    bot.sendMessage(chatId, translationService.translate('bot.recordError'));
+    console.error('[CRICITAL] Record not found. Receipt ID: ', receiptId);
     return null;
   }
   
-  try {
-    const imageBase64 = fs.readFileSync(record.filePath, { encoding: "base64" });
-    const userComment = (!record.comments || config.noKeywords.some((keyword: string) => record.comments.toLowerCase().includes(keyword))) ? '' : record.comments;
-    const categories = config.categories.map(cat => `${cat.name} (${cat.description})`).join(', ');
-
-    const openaiResponse = await openaiClient.analyzeReceipt({
-      imageBase64,
-      userComment,
-      categories,
-    });
-
-    bot.sendMessage(chatId, translationService.translate('bot.analysisComplete'));
-    record.gptTokens = openaiResponse.usage;
-    record.storeName = openaiResponse.data.store_name;
-    record.products = openaiResponse.data.products;
-    record.totalAmount = openaiResponse.data.total_amount;
-
-    // Update record with analysis results
-    await updateRecord(receiptId, record);
-
-  } catch (error) {
-    console.error('Error analyzing receipt:', error);
-    bot.sendMessage(chatId, translationService.translate('bot.analysisError'));
-    return null;
-  }
-  
-  const productsList = record.products.map(product => 
-    `- ${product.name}: ${product.price.toFixed(2)} PLN (${product.category})`
+  const productsList = record.products.map((product, index) => 
+    `${index + 1}. ${product.name}: ${product.price.toFixed(2)} PLN (${product.category})`
   ).join('\n');
 
   const inputCost = (record.gptTokens.input_tokens / 1000000) * config.tokenCosts.inputCostPerMillion * config.tokenCosts.usdToPlnRate;
@@ -256,7 +279,7 @@ async function processReceiptWithOpenAI(bot: TelegramBot, chatId: number, receip
   const totalCost = inputCost + outputCost;
 
   const message = translationService.translate('bot.receiptSummary', {
-    store: record.storeName,
+    store: record.storeName || '',
     total: record.totalAmount.toFixed(2),
     products: productsList,
     inputTokens: record.gptTokens.input_tokens,
@@ -269,27 +292,26 @@ async function processReceiptWithOpenAI(bot: TelegramBot, chatId: number, receip
 
   bot.sendMessage(chatId, message);
   return {
-    storeName: record.storeName,
+    storeName: record.storeName || '',
     products: record.products,
     totalAmount: record.totalAmount,
     gptTokens: record.gptTokens
   };
 }
 
-/**
- * Appends receipt data to Google Sheets
- * @param record - The receipt record to append
- * @returns Promise resolving when the data is appended
- */
-async function appendReceiptToGoogleSheets(record: ReceiptRecord): Promise<void> {
+async function appendReceiptToGoogleSheets(receiptId: number): Promise<void> {
   try {
+    const record = await getRecordById(receiptId);
+    if (!record) {
+      throw new Error('Record not found');
+    }
     for (const product of record.products) {
       await sheetsClient.appendRecord({
         storeName: record.storeName || '',
         productName: product.name,
         price: product.price,
         category: product.category,
-        purchaseType: record.purchaseType
+        isShared: product.isShared
       });
     }
     console.log('Successfully appended receipt data to Google Sheets');
@@ -321,7 +343,6 @@ async function handleManualRecipe(bot: TelegramBot, chatId: number, receiptId?: 
       // Create new receipt record if no ID provided
       receipt = {
         filePath: '',
-        purchaseType: 'solo',
         comments: '',
         timestamp: new Date().toISOString(),
         storeName: '',
@@ -356,33 +377,31 @@ async function handleManualRecipe(bot: TelegramBot, chatId: number, receiptId?: 
     receipt.storeName = storeName;
 
     // Ask for purchase type
-    bot.sendMessage(chatId, translationService.translate('bot.handleManualRecipe.askType', {
-      commonWords: config.commonKeywords.join(', '),
-      soloWords: config.soloKeywords.join(', ')
-    }));
+    const typeText = await waitForValidAnswer(
+      bot,
+      chatId,
+      translationService.translate('bot.handleManualRecipe.askType', {
+        commonWords: config.commonKeywords.join(', '),
+        soloWords: config.soloKeywords.join(', ')
+      }),
+      (text) => {
+        const lowerText = text.toLowerCase();
+        return config.commonKeywords.some(k => lowerText.includes(k)) || 
+               config.soloKeywords.some(k => lowerText.includes(k));
+      }
+    );
 
-    const typeMsg = await new Promise<TelegramBot.Message>((resolve) => {
-      bot.once('message', resolve);
-    });
-    const typeText = typeMsg.text?.toLowerCase().trim();
-    if (!typeText) {
-      throw new Error('Purchase type is required');
-    }
+    const isSharedDefault = config.commonKeywords.some(keyword => typeText.toLowerCase().includes(keyword));
 
-    const purchaseType = config.commonKeywords.some(keyword => typeText.includes(keyword))
-      ? 'shared'
-      : config.soloKeywords.some(keyword => typeText.includes(keyword))
-        ? 'solo'
-        : 'solo';
 
-    receipt.purchaseType = purchaseType;
-
-    const products: Array<{name: string, price: number, category: string}> = [];
+    const products: Array<{name: string, price: number, category: string, isShared: boolean}> = [];
     let totalAmount = 0;
 
     // Ask for products until user says "stop"
     bot.sendMessage(chatId, translationService.translate('bot.handleManualRecipe.askItems', {
-      categories: getHumanReadableCategoryList()
+      categories: getHumanReadableCategoryList(),
+      commonWords: config.commonKeywords.join(', '),
+      soloWords: config.soloKeywords.join(', ')
     }));
 
     while (true) {
@@ -395,11 +414,16 @@ async function handleManualRecipe(bot: TelegramBot, chatId: number, receiptId?: 
         break;
       }
 
-      const [name, category, priceStr] = productText.split(',').map(part => part.trim());
+      const [name, category, priceStr, isSharedUserInput] = productText.split(',').map(part => part.trim());
       
       if (!name || !category || !priceStr) {
         bot.sendMessage(chatId, translationService.translate('bot.handleManualRecipe.invalidFormat'));
         continue;
+      }
+
+      let isShared = isSharedDefault;
+      if (isSharedUserInput) {
+        isShared = config.commonKeywords.some(keyword => isSharedUserInput.toLowerCase().includes(keyword)) ? true : false;
       }
 
       const matchingCategory = findCategory(category);
@@ -417,7 +441,7 @@ async function handleManualRecipe(bot: TelegramBot, chatId: number, receiptId?: 
         continue;
       }
 
-      products.push({ name, price, category: categoryToUse.name });
+      products.push({ name, price, category: categoryToUse.name, isShared: isShared });
       totalAmount += price;
     }
 
@@ -430,7 +454,7 @@ async function handleManualRecipe(bot: TelegramBot, chatId: number, receiptId?: 
     receipt.totalAmount = totalAmount;
     await updateRecord(receiptId, receipt);
     await updateReceiptStatus(receiptId, ReceiptStatus.PROCESSING, 'Saving manual recipe to Google Sheets');
-    await appendReceiptToGoogleSheets(receipt);
+    await appendReceiptToGoogleSheets(receiptId);
     await updateReceiptStatus(receiptId, ReceiptStatus.SAVED_TO_SHEETS, 'Manual recipe saved to Google Sheets');
 
     bot.sendMessage(chatId, translationService.translate('bot.handleManualRecipe.success', {
@@ -448,13 +472,184 @@ async function handleManualRecipe(bot: TelegramBot, chatId: number, receiptId?: 
   }
 }
 
-// Add handler for commands from config
-const commandPattern = new RegExp(`^(${config.manualCommands.join('|')})$`, 'i');
-bot.onText(commandPattern, async (msg) => {
-  await handleManualRecipe(bot, msg.chat.id);
-});
+async function analyzeReceiptWithOpenAI(receiptId: number, bot: TelegramBot, chatId: number): Promise<boolean> {
+  try {
+    const openaiClient = new OpenAIClient();
+    const record = await getRecordById(receiptId);
+    if (!record) {
+      bot.sendMessage(chatId, translationService.translate('bot.recordError'));
+      return false;
+    }
 
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, translationService.translate('bot.start'));
-}); 
+    const imageBase64 = fs.readFileSync(record.filePath, { encoding: "base64" });
+    const userComment = (!record.comments || config.noKeywords.some((keyword: string) => record.comments.toLowerCase().includes(keyword))) ? '' : record.comments;
+    const categories = config.categories.map(cat => `${cat.name} (${cat.description})`).join(', ');
+
+    const openaiResponse = await openaiClient.analyzeReceipt({
+      imageBase64,
+      userComment,
+      categories,
+    });
+
+    bot.sendMessage(chatId, translationService.translate('bot.analysisComplete'));
+    record.gptTokens = openaiResponse.usage;
+    record.storeName = openaiResponse.data.store_name;
+    record.products = openaiResponse.data.products;
+    record.totalAmount = openaiResponse.data.total_amount;
+
+    await updateRecord(receiptId, record);
+    return true;
+
+  } catch (error) {
+    console.error('Error analyzing receipt:', error);
+    bot.sendMessage(chatId, translationService.translate('bot.analysisError'));
+    return false;
+  }
+}
+
+
+async function preciseAiResponse(receiptId: number, bot: TelegramBot, chatId: number): Promise<boolean> {
+  const record = await getRecordById(receiptId);
+  if (!record) {
+    bot.sendMessage(chatId, translationService.translate('bot.recordError'));
+    return false;
+  }
+
+  // Ask for the type of processing
+  const typeAnswer = await waitForValidAnswer(
+    bot,
+    chatId,
+    translationService.translate('bot.preciseAiResponse.askType', {
+      commonWords: config.commonKeywords.join(', '),
+      soloWords: config.soloKeywords.join(', '),
+      multiWords: config.multiKeywords.join(', ')
+    }),
+    (text) => {
+      const lowerText = text.toLowerCase();
+      return config.commonKeywords.some(k => lowerText.includes(k)) || 
+             config.soloKeywords.some(k => lowerText.includes(k)) ||
+             config.multiKeywords.some(k => lowerText.includes(k));
+    }
+  );
+
+  const type = typeAnswer.toLowerCase();
+
+  // Handle shared or private case
+  if (config.commonKeywords.some(k => type.includes(k))) {
+    record.products = record.products.map(product => ({
+      ...product,
+      isShared: true
+    }));
+  } else if (config.soloKeywords.some(k => type.includes(k))) {
+    record.products = record.products.map(product => ({
+      ...product,
+      isShared: false
+    }));
+  }
+  // Handle multi case
+  else if (config.multiKeywords.some(k => type.includes(k))) {
+    // Ask for default type
+    const defaultTypeAnswer = await waitForValidAnswer(
+      bot,
+      chatId,
+      translationService.translate('bot.preciseAiResponse.askDefaultType', {
+        commonWords: config.commonKeywords.join(', '),
+        soloWords: config.soloKeywords.join(', '),
+      }),
+      (text) => {
+        const lowerText = text.toLowerCase();
+        return config.commonKeywords.some(k => lowerText.includes(k)) || 
+               config.soloKeywords.some(k => lowerText.includes(k)) ||
+               config.multiKeywords.some(k => lowerText.includes(k));
+      }
+    );
+
+    const defaultType = defaultTypeAnswer.toLowerCase();
+    const defaultIsShared = config.commonKeywords.some(k => defaultType.includes(k));
+    
+    record.products = record.products.map(product => ({
+      ...product,
+      isShared: defaultIsShared
+    }));
+
+    showProductList(bot, chatId, record);
+
+    // Process product selection
+    while (true) {
+      const selectionAnswer = await waitForValidAnswer(
+        bot,
+        chatId,
+        translationService.translate('bot.preciseAiResponse.selectProducts'),
+        () => true // Accept any input as we'll validate it later
+      );
+
+      if (selectionAnswer.toUpperCase() === 'STOP') {
+        break;
+      }
+
+      if (selectionAnswer.toUpperCase() === 'SHOW') {
+        showProductList(bot, chatId, record);
+        continue;
+      }
+
+      // Parse numbers and validate them
+      const numbers = selectionAnswer.split(',')
+        .map(n => parseInt(n.trim()))
+        .filter(n => !isNaN(n) && n > 0 && n <= record.products.length);
+
+      if (numbers.length === 0) {
+        bot.sendMessage(chatId, translationService.translate('bot.preciseAiResponse.invalidNumbers'));
+        continue;
+      }
+
+      // Toggle isShared for selected products
+      numbers.forEach(index => {
+        if (record.products[index - 1]) {
+          record.products[index - 1].isShared = !record.products[index - 1].isShared;
+        }
+      });
+
+      showProductList(bot, chatId, record);
+    }
+  }
+
+  // Update record in database
+  await updateRecord(receiptId, record);
+  bot.sendMessage(chatId, translationService.translate('bot.preciseAiResponse.completed'));
+  
+  return true;
+}
+
+// HELPER FUNCTIONS
+const waitForValidAnswer = async (
+  bot: TelegramBot,
+  chatId: number, 
+  message: string,
+  validator: (text: string) => boolean
+): Promise<string> => {
+  await bot.sendMessage(
+    chatId,
+    message
+  );
+
+  while (true) {
+    const msg = await new Promise<TelegramBot.Message>((resolve) => {
+      bot.once('message', resolve);
+    });
+
+    if (msg.text && validator(msg.text)) {
+      return msg.text;
+    }
+  }
+};
+
+const showProductList = (bot: TelegramBot, chatId: number, record: ReceiptRecord) => {
+  const productsList = record.products.map((product, index) => 
+    `${index + 1}. ${product.name}: ${product.price.toFixed(2)} PLN (${product.isShared ? translationService.translate('sharedWords') : translationService.translate('soloWords')})`
+  ).join('\n');
+  
+  bot.sendMessage(chatId, translationService.translate('bot.showProducts', {
+    products: productsList
+  }));
+};
 

@@ -50,6 +50,8 @@ Consider store names and product descriptions to infer categories if required.
 1. Prioritize interpreting the user's comment for each receipt item.
 2. Identify store name and infer product categories if not explicit.
 3. Extract total spent amount.
+4. For products that appear more than once, output only the final cumulative total for that product.
+5. When discounts, rebates, or reductions are present, use the discounted price.
 # Notes
 - Categories to consider: ${categories}`
               }
@@ -105,9 +107,9 @@ Consider store names and product descriptions to infer categories if required.
             }
           }
         },
-        temperature: 1,
+        temperature: 0.9,
         max_output_tokens: 2048,
-        top_p: 1,
+        top_p: 0.9,
         store: true
       });
 
