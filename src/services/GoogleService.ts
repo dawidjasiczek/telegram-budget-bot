@@ -7,7 +7,7 @@ interface ProductRecord {
   productName: string;
   price: number;
   category: string;
-  purchaseType: string;
+  isShared: boolean;
 }
 
 export class GoogleSheetsClient {
@@ -83,17 +83,18 @@ export class GoogleSheetsClient {
     const sheetName = this.monthNames[monthIndex];
 
     // Apply common expense percentage if the purchase type is 'shared'
-    const finalPrice = record.purchaseType === 'shared' 
+    const finalPrice = record.isShared 
       ? record.price * config.commonExpensePercentage 
       : record.price;
 
+    
     const rowData = [
       new Date().toISOString().split('T')[0],
       record.storeName || '',
       record.productName || '',
       finalPrice || 0,
       record.category || '',
-      record.purchaseType || 'solo',
+      record.isShared.toString(),
     ];
 
     try {

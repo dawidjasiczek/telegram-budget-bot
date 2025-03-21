@@ -14,19 +14,23 @@ export interface Config {
   maxDimension: number;
   commonKeywords: string[];
   soloKeywords: string[];
+  yesKeywords: string[];
   noKeywords: string[];
   manualCommands: string[];
   categories: Category[];
   tokenCosts: TokenCosts;
   language: string;
   commonExpensePercentage: number;
+  multiKeywords: string[];
 }
 
 export const config: Config = {
-  maxDimension: 420,
-  commonKeywords: ['rolna', 'wspólne', 'w', 'razem'],
-  soloKeywords: ['p', 'pv', 'swoje', 'priv', 'własne', 'solo'],
-  noKeywords: ['nie', 'brak', 'nic', 'nope', 'no'],
+  maxDimension: 1280,
+  commonKeywords: ['w', 'r'],
+  soloKeywords: ['p', 'pv'],
+  multiKeywords: ['multi', 'm'],
+  yesKeywords: ['tak', 't', 'y'],
+  noKeywords: ['nie', "n"],
   manualCommands: ['rachunek', "manualnie", "bill", "manual", "m"],
   commonExpensePercentage: 0.5, 
   categories: [
